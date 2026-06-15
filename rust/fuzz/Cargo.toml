@@ -1,0 +1,20 @@
+[package]
+name = "framed-message-protocol-fuzz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+bytes = "1"
+
+[dependencies.framed-message-protocol]
+path = ".."
+features = ["tokio"]  # we only need the core Frame types for fuzzing
+
+# Prevent this crate from interfering with workspaces
+[workspace]
+members = ["."]
