@@ -1,0 +1,78 @@
+name: Scheduled Fuzzing
+
+on:
+  schedule:
+    # Run every Sunday at 03:00 UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
+
+jobs:
+  fuzz:
+    name: Fuzz decode_raw
+    runs-on: ubuntu-latest
+    # Prevent multiple concurrent fuzz jobs
+    concurrency:
+      group: fuzzing
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Run decode_raw fuzzer (limited time)
+        working-directory: rust/fuzz
+        run: |
+          # Run for max 45 minutes to stay within GitHub free tier limits
+          cargo +nightly fuzz run decode_raw -- \
+            -max_total_time=2700 \
+            -jobs=2 \
+            -rss_limit_mb=1024
+
+      - name: Upload crashing inputs as artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crash-artifacts-${{ github.run_id }}
+          path: |
+            rust/fuzz/artifacts/**
+            rust/fuzz/corpus/**
+          retention-days: 30
+
+      - name: Minimize corpus (on success)
+        if: success()
+        working-directory: rust/fuzz
+        run: cargo +nightly fuzz cmin decode_raw || true
+
+  roundtrip-fuzz:
+    name: Fuzz roundtrip
+    runs-on: ubuntu-latest
+    needs: fuzz   # Run after main security target
+    if: success() || failure()  # Still run even if main target found something
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Run roundtrip fuzzer
+        working-directory: rust/fuzz
+        run: |
+          cargo +nightly fuzz run roundtrip -- \
+            -max_total_time=1800 \
+            -jobs=2
+
+      - name: Upload roundtrip artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roundtrip-crash-${{ github.run_id }}
+          path: rust/fuzz/artifacts/**
+          retention-days: 30

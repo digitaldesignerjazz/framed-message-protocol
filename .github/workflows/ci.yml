@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test + Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        working-directory: rust
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: rust
+
+      - name: Run tests (including proptest)
+        run: cargo test --all
+        working-directory: rust
+
+      - name: Build examples
+        run: cargo build --examples
+        working-directory: rust
+
+  fuzz-check:
+    name: Fuzz Setup Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (nightly for fuzz)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Check fuzz targets compile
+        run: |
+          cargo install cargo-fuzz
+          cargo +nightly fuzz check decode_raw
+          cargo +nightly fuzz check roundtrip
+        working-directory: rust/fuzz
