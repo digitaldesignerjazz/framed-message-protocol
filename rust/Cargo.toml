@@ -1,0 +1,37 @@
+[package]
+name = "framed-message-protocol"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sven Normen <sven@esslinger.dev>"]
+description = "Framed Message Protocol (FMP) - Lightweight, extensible framing for P2P and mesh networks. Reference implementation in Rust."
+license = "MIT"
+repository = "https://github.com/digitaldesignerjazz/framed-message-protocol"
+keywords = ["p2p", "mesh", "framing", "protocol", "networking", "quic", "yggdrasil"]
+categories = ["network-programming", "asynchronous"]
+
+[features]
+default = ["tokio"]
+tokio = ["dep:tokio", "dep:bytes"]
+quinn = ["tokio", "dep:quinn"]  # Quinn streams are AsyncRead + AsyncWrite compatible
+
+[dependencies]
+thiserror = "1.0"
+bytes = { version = "1", optional = true }
+tokio = { version = "1.38", features = ["io-util", "net", "rt", "macros", "time", "sync"], optional = true }
+crc32fast = "1.4"   # For HAS_CHECKSUM support (compatible with older Rust)
+quinn = { version = "0.11", optional = true }  # Only for type compatibility notes
+
+[dev-dependencies]
+tokio = { version = "1.38", features = ["full", "test-util"] }
+tokio-test = "0.4"
+
+[[example]]
+name = "echo_server"
+path = "examples/echo_server.rs"
+
+[[example]]
+name = "ping_pong"
+path = "examples/ping_pong.rs"
+
+[lib]
+path = "src/lib.rs"
