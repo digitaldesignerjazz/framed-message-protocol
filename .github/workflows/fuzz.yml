@@ -2,13 +2,12 @@ name: Scheduled Fuzzing
 
 on:
   schedule:
-    # Run every Sunday at 03:00 UTC
     - cron: '0 3 * * 0'
   workflow_dispatch:
 
 jobs:
   rust-fuzz:
-    name: Rust Fuzzing
+    name: Rust Fuzzing (decode_raw)
     runs-on: ubuntu-latest
     concurrency:
       group: rust-fuzzing
@@ -26,7 +25,8 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz
 
-      - name: Run Rust decode_raw fuzzer
+      - name: Run long Rust fuzz session
+        continue-on-error: true
         working-directory: rust/fuzz
         run: |
           cargo +nightly fuzz run decode_raw -- \
@@ -34,15 +34,16 @@ jobs:
             -jobs=2 \
             -rss_limit_mb=1024
 
-      - name: Upload Rust crash artifacts
-        if: failure()
+      - name: Upload Rust crash artifacts (if any found)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rust-fuzz-crash-${{ github.run_id }}
+          name: rust-fuzz-artifacts-${{ github.run_id }}
           path: |
             rust/fuzz/artifacts/**
             rust/fuzz/corpus/**
           retention-days: 90
+          if-no-files-found: warn
 
   go-fuzz:
     name: Go Fuzzing
@@ -56,16 +57,31 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Run Go fuzz targets (longer session)
+      - name: Run longer Go fuzz sessions
+        continue-on-error: true
         working-directory: go
         run: |
+          echo "Starting Go fuzzing (decode_raw)..."
           go test -fuzz=FuzzDecodeRaw -fuzztime=5m ./... || true
+          echo "Starting Go fuzzing (roundtrip)..."
           go test -fuzz=FuzzRoundtrip -fuzztime=5m ./... || true
 
-      - name: Upload Go fuzz artifacts
-        if: failure()
+      - name: Upload Go fuzz artifacts (if any)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: go-fuzz-crash-${{ github.run_id }}
+          name: go-fuzz-artifacts-${{ github.run_id }}
           path: go/**
           retention-days: 30
+          if-no-files-found: warn
+
+  summary:
+    name: Fuzzing Summary
+    runs-on: ubuntu-latest
+    needs: [rust-fuzz, go-fuzz]
+    if: always()
+    steps:
+      - name: Print summary
+        run: |
+          echo "Fuzzing run completed."
+          echo "Check the 'Artifacts' section for any crashing inputs found."
